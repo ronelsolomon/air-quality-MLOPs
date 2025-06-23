@@ -35,6 +35,10 @@ def log_model(
     # Create model directory if it doesn't exist
     os.makedirs(model_dir, exist_ok=True)
     
+    # End any active runs
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
+    
     # Start MLflow run
     with mlflow.start_run() as run:
         # Log parameters
