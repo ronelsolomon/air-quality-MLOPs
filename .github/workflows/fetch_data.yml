@@ -39,16 +39,19 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
         pip install pandas requests python-dotenv
     
     - name: Fetch historical data
       id: fetch
+      env:
+        # Add your API token as a GitHub secret and reference it here
+        # API_TOKEN: ${{ secrets.AIR_QUALITY_API_TOKEN }}
+        pass
       run: |
-        # Set end date (default to today)
+        # Set end date (default to yesterday to ensure data is available)
         if [ -z "${{ github.event.inputs.end_date }}" ]; then
-          END_DATE=$(date +'%Y-%m-%d')
-          echo "Using end date: $END_DATE"
+          END_DATE=$(date -d "yesterday" +'%Y-%m-%d')
+          echo "Using end date: $END_DATE (yesterday)"
         else
           END_DATE="${{ github.event.inputs.end_date }}"
           echo "Using provided end date: $END_DATE"
@@ -62,8 +65,9 @@ jobs:
           DAYS_BACK=${{
             github.event.inputs.days_back || '1'
           }}
-          START_DATE=$(date -d "$END_DATE - $DAYS_BACK days" +'%Y-%m-%d')
-          echo "Calculated start date: $START_DATE (end date - $DAYS_BACK days)"
+          # Calculate start date as (end_date - days_back + 1) to be inclusive
+          START_DATE=$(date -d "$END_DATE - $((DAYS_BACK - 1)) days" +'%Y-%m-%d')
+          echo "Calculated start date: $START_DATE"
         fi
         
         # Validate dates
@@ -73,28 +77,17 @@ jobs:
         fi
         
         echo "Fetching data from $START_DATE to $END_DATE"
-        python -c "
-        from fetch_historical_data import fetch_historical_data
-        from datetime import datetime
         
-        # Convert dates to datetime objects for validation
-        start = datetime.strptime('$START_DATE', '%Y-%m-%d')
-        end = datetime.strptime('$END_DATE', '%Y-%m-%d')
+        # Run the lightweight fetch script
+        python fetch_data_github.py \
+          --start-date "$START_DATE" \
+          --end-date "$END_DATE" \
+          --output training_data.csv \
+          --api-token "$API_TOKEN"
         
-        # Calculate max allowed start date (2 years back from today)
-        max_days_back = 730  # ~2 years
-        max_start_date = datetime.now() - datetime.timedelta(days=max_days_back)
-        
-        if start < max_start_date:
-            print(f'Warning: Start date is more than {max_days_back} days in the past. Data might not be available.')
-            print(f'Setting start date to: {max_start_date.strftime(\"%Y-%m-%d\")}')
-            start = max_start_date
-        
-        fetch_historical_data(
-            start_date=start.strftime('%Y-%m-%d'),
-            end_date=end.strftime('%Y-%m-%d'),
-            output_file='training_data.csv'
-        )"
+        # Output the date range for use in subsequent steps
+        echo "START_DATE=$START_DATE" >> $GITHUB_ENV
+        echo "END_DATE=$END_DATE" >> $GITHUB_ENV
     
     - name: Check for data changes
       id: git-check
@@ -114,12 +107,12 @@ jobs:
       if: steps.git-check.outputs.changes_detected == 'true'
       run: |
         git add training_data.csv
-        git commit -m "[Automated] Update air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
+        git commit -m "[Automated] Update air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
         git push
     
     - name: Output date range info
       run: |
-        echo "Data fetch completed for range: ${{ steps.fetch.outputs.START_DATE }} to ${{ steps.fetch.outputs.END_DATE }}"
+        echo "Data fetch completed for range: ${{ env.START_DATE }} to ${{ env.END_DATE }}"
         echo "Changes detected: ${{ steps.git-check.outputs.changes_detected || 'false' }}"
     
     - name: Trigger model retraining (optional)
@@ -139,7 +132,7 @@ jobs:
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: "[Automated] Update air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
-        title: "[Data Update] New air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
+        commit-message: "[Automated] Update air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
+        title: "[Data Update] New air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
         body: "Automated update of air quality data"
         branch: "data/update-$(date +%s)"
