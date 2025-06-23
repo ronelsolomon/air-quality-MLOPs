@@ -8,3 +8,10 @@ python-dateutil>=2.8.2
 protobuf>=3.20.0,<4.0.0
 pydantic>=1.8.0,<2.0.0
 SQLAlchemy>=1.4.0,<2.0.0
+
+# For model training and evaluation
+scikit-learn>=1.0.2
+joblib>=1.1.0
+matplotlib>=3.5.1
+seaborn>=0.11.2
+jupyter>=1.0.0  # For any notebook-based analysis
