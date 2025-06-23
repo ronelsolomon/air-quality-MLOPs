@@ -1,0 +1,97 @@
+name: Fetch Air Quality Data
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every day (4:00 PM PST / 5:00 PM PDT)
+    - cron: '0 0 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of days of historical data to fetch (default: 1)'
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+    
+    env:
+      PYTHON_VERSION: '3.11'
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Required for git diff to work properly
+    
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pandas requests python-dotenv
+    
+    - name: Fetch historical data
+      id: fetch
+      run: |
+        # Get the number of days to fetch (from input or default to 1)
+        DAYS_BACK=${{
+          github.event_name == 'workflow_dispatch' && 
+          github.event.inputs.days_back || '1'
+        }}
+        
+        echo "Fetching data for the last $DAYS_BACK days"
+        python -c "
+        from fetch_historical_data import fetch_air_quality_data
+        from datetime import datetime, timedelta
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=int('${{DAYS_BACK}}')-1)
+        fetch_air_quality_data(
+            start_date=start_date.strftime('%Y-%m-%d'),
+            end_date=end_date.strftime('%Y-%m-%d'),
+            output_file='training_data.csv'
+        )"
+    
+    - name: Check for data changes
+      id: git-check
+      run: |
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'actions@github.com'
+        
+        # Check if there are any changes
+        git diff --exit-code training_data.csv || echo "changes_detected=true" >> $GITHUB_OUTPUT
+        
+    - name: Commit and push changes
+      if: steps.git-check.outputs.changes_detected == 'true'
+      run: |
+        git add training_data.csv
+        git commit -m "[Automated] Update air quality data $(date +'%Y-%m-%d')"
+        git push
+    
+    - name: Trigger model retraining (optional)
+      if: steps.git-check.outputs.changes_detected == 'true' && github.event_name == 'schedule'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'train_model.yml',
+            ref: 'main'
+          })
+    
+    - name: Create PR if needed (optional)
+      if: steps.git-check.outputs.changes_detected == 'true' && github.event_name == 'schedule'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "[Automated] Update air quality data $(date +'%Y-%m-%d')"
+        title: "[Data Update] New air quality data $(date +'%Y-%m-%d')"
+        body: "Automated update of air quality data"
+        branch: "data/update-$(date +%s)"
