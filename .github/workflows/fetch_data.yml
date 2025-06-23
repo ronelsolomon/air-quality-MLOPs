@@ -46,7 +46,6 @@ jobs:
       env:
         # Add your API token as a GitHub secret and reference it here
         # API_TOKEN: ${{ secrets.AIR_QUALITY_API_TOKEN }}
-        pass
       run: |
         # Set end date (default to yesterday to ensure data is available)
         if [ -z "${{ github.event.inputs.end_date }}" ]; then
