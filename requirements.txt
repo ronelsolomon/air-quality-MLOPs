@@ -15,3 +15,9 @@ joblib>=1.1.0
 matplotlib>=3.5.1
 seaborn>=0.11.2
 jupyter>=1.0.0  # For any notebook-based analysis
+
+# Model registry and tracking
+mlflow>=2.3.0
+gitpython>=3.1.30  # Required for MLflow model registry
+docker>=6.0.0  # Required for MLflow model serving
+python-dotenv>=0.21.0  # For managing environment variables
