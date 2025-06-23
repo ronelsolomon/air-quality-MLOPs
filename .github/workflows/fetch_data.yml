@@ -7,11 +7,16 @@ on:
   # Allow manual triggering
   workflow_dispatch:
     inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD). If not provided, uses end_date - days_back'
+        required: false
+      end_date:
+        description: 'End date (YYYY-MM-DD). Defaults to today'
+        required: false
       days_back:
-        description: 'Number of days of historical data to fetch (default: 1)'
+        description: 'Number of days of historical data to fetch (used if start_date not provided)'
         required: false
         default: '1'
-        type: string
 
 jobs:
   fetch-data:
@@ -40,21 +45,54 @@ jobs:
     - name: Fetch historical data
       id: fetch
       run: |
-        # Get the number of days to fetch (from input or default to 1)
-        DAYS_BACK=${{
-          github.event_name == 'workflow_dispatch' && 
-          github.event.inputs.days_back || '1'
-        }}
+        # Set end date (default to today)
+        if [ -z "${{ github.event.inputs.end_date }}" ]; then
+          END_DATE=$(date +'%Y-%m-%d')
+          echo "Using end date: $END_DATE"
+        else
+          END_DATE="${{ github.event.inputs.end_date }}"
+          echo "Using provided end date: $END_DATE"
+        fi
         
-        echo "Fetching data for the last $DAYS_BACK days"
+        # Set start date based on input or calculate from days_back
+        if [ -n "${{ github.event.inputs.start_date }}" ]; then
+          START_DATE="${{ github.event.inputs.start_date }}"
+          echo "Using provided start date: $START_DATE"
+        else
+          DAYS_BACK=${{
+            github.event.inputs.days_back || '1'
+          }}
+          START_DATE=$(date -d "$END_DATE - $DAYS_BACK days" +'%Y-%m-%d')
+          echo "Calculated start date: $START_DATE (end date - $DAYS_BACK days)"
+        fi
+        
+        # Validate dates
+        if [[ "$START_DATE" > "$END_DATE" ]]; then
+          echo "Error: Start date ($START_DATE) is after end date ($END_DATE)"
+          exit 1
+        fi
+        
+        echo "Fetching data from $START_DATE to $END_DATE"
         python -c "
-        from fetch_historical_data import fetch_air_quality_data
-        from datetime import datetime, timedelta
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=int('${{DAYS_BACK}}')-1)
-        fetch_air_quality_data(
-            start_date=start_date.strftime('%Y-%m-%d'),
-            end_date=end_date.strftime('%Y-%m-%d'),
+        from fetch_historical_data import fetch_historical_data
+        from datetime import datetime
+        
+        # Convert dates to datetime objects for validation
+        start = datetime.strptime('$START_DATE', '%Y-%m-%d')
+        end = datetime.strptime('$END_DATE', '%Y-%m-%d')
+        
+        # Calculate max allowed start date (2 years back from today)
+        max_days_back = 730  # ~2 years
+        max_start_date = datetime.now() - datetime.timedelta(days=max_days_back)
+        
+        if start < max_start_date:
+            print(f'Warning: Start date is more than {max_days_back} days in the past. Data might not be available.')
+            print(f'Setting start date to: {max_start_date.strftime(\"%Y-%m-%d\")}')
+            start = max_start_date
+        
+        fetch_historical_data(
+            start_date=start.strftime('%Y-%m-%d'),
+            end_date=end.strftime('%Y-%m-%d'),
             output_file='training_data.csv'
         )"
     
@@ -65,14 +103,24 @@ jobs:
         git config --global user.email 'actions@github.com'
         
         # Check if there are any changes
-        git diff --exit-code training_data.csv || echo "changes_detected=true" >> $GITHUB_OUTPUT
+        if git diff --exit-code training_data.csv; then
+          echo "No changes detected in the data"
+        else
+          echo "changes_detected=true" >> $GITHUB_OUTPUT
+          echo "Changes detected in the data"
+        fi
         
     - name: Commit and push changes
       if: steps.git-check.outputs.changes_detected == 'true'
       run: |
         git add training_data.csv
-        git commit -m "[Automated] Update air quality data $(date +'%Y-%m-%d')"
+        git commit -m "[Automated] Update air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
         git push
+    
+    - name: Output date range info
+      run: |
+        echo "Data fetch completed for range: ${{ steps.fetch.outputs.START_DATE }} to ${{ steps.fetch.outputs.END_DATE }}"
+        echo "Changes detected: ${{ steps.git-check.outputs.changes_detected || 'false' }}"
     
     - name: Trigger model retraining (optional)
       if: steps.git-check.outputs.changes_detected == 'true' && github.event_name == 'schedule'
@@ -91,7 +139,7 @@ jobs:
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: "[Automated] Update air quality data $(date +'%Y-%m-%d')"
-        title: "[Data Update] New air quality data $(date +'%Y-%m-%d')"
+        commit-message: "[Automated] Update air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
+        title: "[Data Update] New air quality data (${{ github.event.inputs.start_date || 'auto' }} to ${{ github.event.inputs.end_date || 'today' }})"
         body: "Automated update of air quality data"
         branch: "data/update-$(date +%s)"
