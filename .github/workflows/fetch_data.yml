@@ -83,7 +83,14 @@ jobs:
           --start-date "$START_DATE" \
           --end-date "$END_DATE" \
           --output training_data.csv \
-          --api-token "18fed86f6f05b8695480ad90a15a00661e1b28de"
+          --api-token "18fed86f6f05b8695480ad90a15a00661e1b28de" \
+          --city "Milpitas"
+        
+        # Check if the script ran successfully
+        if [ $? -ne 0 ]; then
+          echo "Error: Failed to fetch data"
+          exit 1
+        fi
         
         # Output the date range for use in subsequent steps
         echo "START_DATE=$START_DATE" >> $GITHUB_ENV
@@ -135,4 +142,3 @@ jobs:
         title: "[Data Update] New air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
         body: "Automated update of air quality data"
         branch: data/update-${{ github.run_id }}
-
