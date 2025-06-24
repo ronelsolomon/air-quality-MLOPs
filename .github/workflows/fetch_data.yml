@@ -83,7 +83,7 @@ jobs:
           --start-date "$START_DATE" \
           --end-date "$END_DATE" \
           --output training_data.csv \
-          --api-token "$API_TOKEN"
+          --api-token "18fed86f6f05b8695480ad90a15a00661e1b28de"
         
         # Output the date range for use in subsequent steps
         echo "START_DATE=$START_DATE" >> $GITHUB_ENV

@@ -44,20 +44,25 @@ def fetch_air_quality_data(start_date: str, end_date: str, output_file: str, api
     print(f"[INFO] Saved {len(df)} records to {output_file}")
     return df
 
-if __name__ == "__main__":
+def main():
     import argparse
-    
-    parser = argparse.ArgumentParser(description='Fetch historical air quality data')
-    parser.add_argument('--start-date', required=True, help='Start date (YYYY-MM-DD)')
-    parser.add_argument('--end-date', required=True, help='End date (YYYY-MM-DD)')
-    parser.add_argument('--output', default='training_data.csv', help='Output CSV file path')
-    parser.add_argument('--api-token', help='API token')
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start-date", required=True)
+    parser.add_argument("--end-date", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--api-token", required=True)
     args = parser.parse_args()
-    
-    fetch_air_quality_data(
-        start_date=args.start_date,
-        end_date=args.end_date,
-        output_file=args.output,
-        api_token=args.api_token
-    )
+
+    new_data = fetch_new_data(args.start_date, args.end_date, args.api_token)
+
+    if os.path.exists(args.output):
+        # Read existing data
+        existing = pd.read_csv(args.output)
+        # Combine and drop duplicates (if needed)
+        combined = pd.concat([existing, new_data]).drop_duplicates()
+        combined.to_csv(args.output, index=False)
+    else:
+        new_data.to_csv(args.output, index=False)
+
+if __name__ == "__main__":
+    main()
