@@ -100,12 +100,6 @@ air-quality-mlops/
 └── README.md            # This file
 ```
 
-## 📈 Model Performance
-
-Current model metrics:
-- **R² Score**: 0.85
-- **MAE**: 12.3
-- **RMSE**: 15.6
 
 ## 🤝 Contributing
 
@@ -129,5 +123,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-  Made with ❤️ by Your Name
+  Made with ❤️ by Ronel
 </div>
