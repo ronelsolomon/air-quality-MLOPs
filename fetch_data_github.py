@@ -53,7 +53,7 @@ def main():
     parser.add_argument("--api-token", required=True)
     args = parser.parse_args()
 
-    new_data = fetch_new_data(args.start_date, args.end_date, args.api_token)
+    new_data = fetch_air_quality_data(args.start_date, args.end_date, args.api_token)
 
     if os.path.exists(args.output):
         # Read existing data
