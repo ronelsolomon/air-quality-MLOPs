@@ -24,6 +24,7 @@ jobs:
     
     env:
       PYTHON_VERSION: '3.11'
+      API_TOKEN: "18fed86f6f05b8695480ad90a15a00661e1b28de"
       
     steps:
     - name: Checkout repository
@@ -43,9 +44,7 @@ jobs:
     
     - name: Fetch historical data
       id: fetch
-      env:
-        # Add your API token as a GitHub secret and reference it here
-        # API_TOKEN: ${{ secrets.AIR_QUALITY_API_TOKEN }}
+      # Environment variables can be added here when needed
       run: |
         # Set end date (default to yesterday to ensure data is available)
         if [ -z "${{ github.event.inputs.end_date }}" ]; then
@@ -61,16 +60,18 @@ jobs:
           START_DATE="${{ github.event.inputs.start_date }}"
           echo "Using provided start date: $START_DATE"
         else
-          DAYS_BACK=${{
-            github.event.inputs.days_back || '1'
-          }}
+          # Set API token from environment variable
+          DAYS_BACK="${{ github.event.inputs.days_back }}"
+          if [ -z "$DAYS_BACK" ]; then DAYS_BACK=1; fi
+
           # Calculate start date as (end_date - days_back + 1) to be inclusive
-          START_DATE=$(date -d "$END_DATE - $((DAYS_BACK - 1)) days" +'%Y-%m-%d')
+          OFFSET=$((DAYS_BACK - 1))
+          START_DATE=$(date -d "$END_DATE - $OFFSET days" +'%Y-%m-%d')
           echo "Calculated start date: $START_DATE"
         fi
         
         # Validate dates
-        if [[ "$START_DATE" > "$END_DATE" ]]; then
+        if [ "$(date -d "$START_DATE" +%s)" -gt "$(date -d "$END_DATE" +%s)" ]; then
           echo "Error: Start date ($START_DATE) is after end date ($END_DATE)"
           exit 1
         fi
@@ -95,13 +96,12 @@ jobs:
         git config --global user.email 'actions@github.com'
         
         # Check if there are any changes
-        if git diff --exit-code training_data.csv; then
-          echo "No changes detected in the data"
+        if git diff --quiet training_data.csv; then
+          echo "changes_detected=false" >> $GITHUB_OUTPUT
         else
           echo "changes_detected=true" >> $GITHUB_OUTPUT
-          echo "Changes detected in the data"
         fi
-        
+
     - name: Commit and push changes
       if: steps.git-check.outputs.changes_detected == 'true'
       run: |
@@ -134,4 +134,5 @@ jobs:
         commit-message: "[Automated] Update air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
         title: "[Data Update] New air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
         body: "Automated update of air quality data"
-        branch: "data/update-$(date +%s)"
+        branch: data/update-${{ github.run_id }}
+
