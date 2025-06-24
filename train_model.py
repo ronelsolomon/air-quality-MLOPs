@@ -29,10 +29,33 @@ def load_and_validate_data(filepath: str = 'training_data.csv') -> pd.DataFrame:
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df = df.groupby('timestamp').mean().reset_index()  # Aggregate duplicates
+    dupes = df['timestamp'].duplicated().sum()
+    if dupes > 0:
+        print(f"Warning: {dupes} duplicate timestamps found. Aggregating by mean.")
+    df = df.groupby('timestamp').mean(numeric_only=True).reset_index()
     df = df.sort_values('timestamp')
+    if df['aqi'].nunique() == 1:
+        print("Warning: AQI values are constant. Model cannot learn anything.")
     print(f"Final data points after processing: {len(df)}")
     return df
+
+def preprocess_data(df: pd.DataFrame):
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df = df[numeric_cols]
+    if df.isnull().any().any():
+        print("Warning: Found missing values in the data. Imputing missing values...")
+        imputer = SimpleImputer(strategy='median')
+        df = pd.DataFrame(imputer.fit_transform(df), columns=df.columns, index=df.index)
+    if df.isnull().any().any():
+        raise ValueError("Failed to impute all missing values")
+    if 'aqi' not in df.columns:
+        raise ValueError("Target column 'aqi' not found in the data")
+    X = df.drop(columns=['aqi'], errors='ignore')
+    y = df['aqi']
+    feature_names = X.columns.tolist()
+    if not feature_names:
+        raise ValueError("No features available for modeling")
+    return X, y, feature_names
 
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -51,21 +74,6 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
             df[f'aqi_rolling_std_{window}'] = df['aqi'].rolling(window=window, min_periods=1).std()
     return df.reset_index()
 
-def preprocess_data(df: pd.DataFrame):
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    df = df[numeric_cols]
-    if df.isnull().any().any():
-        print("Warning: Found missing values in the data. Imputing missing values...")
-        imputer = SimpleImputer(strategy='median')
-        df[:] = imputer.fit_transform(df)
-    if 'aqi' not in df.columns:
-        raise ValueError("Target column 'aqi' not found in the data")
-    X = df.drop(columns=['aqi'], errors='ignore')
-    y = df['aqi']
-    feature_names = X.columns.tolist()
-    if not feature_names:
-        raise ValueError("No features available for modeling")
-    return X, y, feature_names
 
 def train_random_forest(X_train, y_train):
     print("Training Random Forest model...")
