@@ -9,6 +9,7 @@ import os
 import matplotlib.pyplot as plt
 import mlflow
 from model_registry import log_model, log_experiment_metadata, transition_model_stage
+import argparse
 
 # Set random seed for reproducibility
 np.random.seed(42)
@@ -16,15 +17,15 @@ np.random.seed(42)
 os.makedirs('models', exist_ok=True)
 os.makedirs('reports/figures', exist_ok=True)
 
-def load_and_validate_data(filepath: str = 'training_data.csv') -> pd.DataFrame:
-    print("Loading and validating data...")
+def load_and_validate_data(filepath: str = 'training_data.csv', target_col: str = 'temperature') -> pd.DataFrame:
+    print(f"Loading and validating data with target column: {target_col}...")
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Data file not found: {filepath}")
     df = pd.read_csv(filepath)
     df.columns = df.columns.str.strip()
     if len(df) == 0:
         raise ValueError("Empty dataset. Please check your data source.")
-    required_columns = {'timestamp', 'aqi'}
+    required_columns = {'timestamp', target_col}
     missing_columns = required_columns - set(df.columns)
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
@@ -34,13 +35,13 @@ def load_and_validate_data(filepath: str = 'training_data.csv') -> pd.DataFrame:
         print(f"Warning: {dupes} duplicate timestamps found. Aggregating by mean.")
         df = df.groupby('timestamp').mean(numeric_only=True).reset_index()
         df = df.sort_values('timestamp')
-    if df['aqi'].nunique() == 1:
-        print("Warning: AQI values are constant. Model cannot learn anything.")
+    if df[target_col].nunique() == 1:
+        print(f"Warning: {target_col} values are constant. Model cannot learn anything.")
     print(f"Final data points after processing: {len(df)}")
     print(df.head())
     return df
 
-def preprocess_data(df: pd.DataFrame):
+def preprocess_data(df: pd.DataFrame, target_col: str = 'temperature'):
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     df = df[numeric_cols]
     if df.isnull().any().any():
@@ -49,16 +50,16 @@ def preprocess_data(df: pd.DataFrame):
         df = pd.DataFrame(imputer.fit_transform(df), columns=df.columns, index=df.index)
     if df.isnull().any().any():
         raise ValueError("Failed to impute all missing values")
-    if 'aqi' not in df.columns:
-        raise ValueError("Target column 'aqi' not found in the data")
-    X = df.drop(columns=['aqi'], errors='ignore')
-    y = df['aqi']
+    if target_col not in df.columns:
+        raise ValueError(f"Target column '{target_col}' not found in the data")
+    X = df.drop(columns=[target_col], errors='ignore')
+    y = df[target_col]
     feature_names = X.columns.tolist()
     if not feature_names:
         raise ValueError("No features available for modeling")
     return X, y, feature_names
 
-def create_features(df: pd.DataFrame) -> pd.DataFrame:
+def create_features(df: pd.DataFrame, target_col: str = 'temperature') -> pd.DataFrame:
     if df.empty:
         raise ValueError("Cannot create features: Empty DataFrame")
     df = df.set_index('timestamp').sort_index()
@@ -69,12 +70,11 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     df['is_weekend'] = (df.index.dayofweek >= 5).astype(int)
     if len(df) > 24:
         for lag in [1, 2, 3, 6, 12, 24]:
-            df[f'aqi_lag_{lag}'] = df['aqi'].shift(lag)
+            df[f'{target_col}_lag_{lag}'] = df[target_col].shift(lag)
         for window in [3, 6, 12, 24]:
-            df[f'aqi_rolling_mean_{window}'] = df['aqi'].rolling(window=window, min_periods=1).mean()
-            df[f'aqi_rolling_std_{window}'] = df['aqi'].rolling(window=window, min_periods=1).std()
+            df[f'{target_col}_rolling_mean_{window}'] = df[target_col].rolling(window=window, min_periods=1).mean()
+            df[f'{target_col}_rolling_std_{window}'] = df[target_col].rolling(window=window, min_periods=1).std()
     return df.reset_index()
-
 
 def train_random_forest(X_train, y_train):
     print("Training Random Forest model...")
@@ -150,6 +150,14 @@ def save_model(model, filename='models/air_quality_model.pkl'):
     print(f"Model saved to {filename}")
 
 def main():
+    parser = argparse.ArgumentParser(description='Train air quality prediction model')
+    parser.add_argument('--target', type=str, default='temperature',
+                      help='Target variable to predict (e.g., temperature, humidity, pm25, etc.)')
+    args = parser.parse_args()
+    
+    target_col = args.target
+    print(f"Training model to predict: {target_col}")
+    
     try:
         experiment_name = "air_quality_prediction"
         log_experiment_metadata(
@@ -163,11 +171,12 @@ def main():
             model_version="1.0.0"
         )
         print("\n=== Loading Data ===")
-        df = load_and_validate_data('training_data.csv')
+        df = load_and_validate_data(target_col=target_col)
         print("\n=== Creating Features ===")
-        df = create_features(df)
+        df = create_features(df, target_col=target_col)
+        print(df.head())
         print("\n=== Preprocessing Data ===")
-        X, y, feature_names = preprocess_data(df)
+        X, y, feature_names = preprocess_data(df, target_col=target_col)
         train_size = int(0.8 * len(X))
         X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
         y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]

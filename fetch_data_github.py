@@ -9,12 +9,29 @@ def flatten_air_quality_data(data, date_str=None):
     if not data or 'aqi' not in data:
         return None
     
+    # Get current timestamp
+    now = datetime.now()
+    timestamp = date_str or now.strftime('%Y-%m-%d %H:%M:%S')
+    date = date_str or now.strftime('%Y-%m-%d')
+    
+    # Extract basic air quality data
+    iaqi = data.get('iaqi', {})
+    
     # Create base flat data with all direct fields
     flat_data = {
-        'timestamp': date_str or datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'date': date_str or datetime.now().strftime('%Y-%m-%d'),
+        'timestamp': timestamp,
+        'date': date,
         'aqi': data.get('aqi'),
+        'pm25': iaqi.get('pm25', {}).get('v') if isinstance(iaqi.get('pm25'), dict) else None,
+        'pm10': iaqi.get('pm10', {}).get('v') if isinstance(iaqi.get('pm10'), dict) else None,
+        'co': iaqi.get('co', {}).get('v') if isinstance(iaqi.get('co'), dict) else None,
+        'no2': iaqi.get('no2', {}).get('v') if isinstance(iaqi.get('no2'), dict) else None,
+        'o3': iaqi.get('o3', {}).get('v') if isinstance(iaqi.get('o3'), dict) else None,
+        'temperature': iaqi.get('t', {}).get('v') if isinstance(iaqi.get('t'), dict) else None,
+        'humidity': iaqi.get('h', {}).get('v') if isinstance(iaqi.get('h'), dict) else None,
+        'pressure': iaqi.get('p', {}).get('v') if isinstance(iaqi.get('p'), dict) else None,
         'dominant_pollutant': data.get('dominentpol'),
+        'aqi_category': data.get('category', {}).get('name') if isinstance(data.get('category'), dict) else None,
         'city': data.get('city', {}).get('name', ''),
         'city_geo_lat': data.get('city', {}).get('geo', [None])[0] if isinstance(data.get('city', {}).get('geo'), list) and len(data.get('city', {}).get('geo', [])) > 0 else None,
         'city_geo_lon': data.get('city', {}).get('geo', [None, None])[1] if isinstance(data.get('city', {}).get('geo'), list) and len(data.get('city', {}).get('geo', [])) > 1 else None,
@@ -26,12 +43,32 @@ def flatten_air_quality_data(data, date_str=None):
         'time_tz': data.get('time', {}).get('tz'),
         'time_v': data.get('time', {}).get('v'),
         'attributions': '|'.join([attr.get('name', '') for attr in data.get('attributions', []) if isinstance(attr, dict) and 'name' in attr]),
+        
+        # New fields with None as default
+        'pm25_trend': None,  # Will need additional data or calculation
+        'pm25_24h_change': None,  # Will need historical data to calculate
+        'pm25_7d_avg': None,  # Will need historical data to calculate
+        'pm25_pm10_ratio': lambda: flat_data['pm25'] / flat_data['pm10'] if flat_data.get('pm25') and flat_data.get('pm10') else None,
+        'pm25_no2_ratio': lambda: flat_data['pm25'] / flat_data['no2'] if flat_data.get('pm25') and flat_data.get('no2') else None,
+        'pm25_o3_ratio': lambda: flat_data['pm25'] / flat_data['o3'] if flat_data.get('pm25') and flat_data.get('o3') else None,
+        'heat_index': None,  # Will need calculation based on temp and humidity
+        'hour_of_day': now.hour,
+        'day_of_week': now.weekday(),  # Monday is 0 and Sunday is 6
+        'is_weekend': 1 if now.weekday() >= 5 else 0,  # 1 for Saturday or Sunday, 0 otherwise
+        'month': now.month,
+        'season': (now.month % 12 + 3) // 3,  # 1:Winter, 2:Spring, 3:Summer, 4:Fall
+        'pm25_trend_slope': None,  # Will need time series data to calculate
+        'aqhi': None,  # Will need calculation based on pollutants
     }
     
-    # Add all individual air quality indices (iaqi)
-    iaqi = data.get('iaqi', {})
+    # Calculate derived fields
+    flat_data['pm25_pm10_ratio'] = flat_data['pm25_pm10_ratio']() if callable(flat_data['pm25_pm10_ratio']) else None
+    flat_data['pm25_no2_ratio'] = flat_data['pm25_no2_ratio']() if callable(flat_data['pm25_no2_ratio']) else None
+    flat_data['pm25_o3_ratio'] = flat_data['pm25_o3_ratio']() if callable(flat_data['pm25_o3_ratio']) else None
+    
+    # Add all individual air quality indices (iaqi) for backward compatibility
     for key, value in iaqi.items():
-        if isinstance(value, dict) and 'v' in value:
+        if isinstance(value, dict) and 'v' in value and f'iaqi_{key}' not in flat_data:
             flat_data[f'iaqi_{key}'] = value['v']
     
     # Add forecast data if available
