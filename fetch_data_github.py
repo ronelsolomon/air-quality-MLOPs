@@ -47,7 +47,7 @@ def main():
 
     API_TOKEN = os.getenv("AQICN_TOKEN")
 
-    new_data = fetch_historical_datas(args.start_date, args.end_date, api_token=API_TOKEN)
+    new_data = fetch_historical_datas(args.start_date, args.end_date, api_token="18fed86f6f05b8695480ad90a15a00661e1b28de")
 
     if os.path.exists(args.output):
         # Read existing data
