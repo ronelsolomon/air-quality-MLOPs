@@ -60,7 +60,7 @@ jobs:
     
     - name: Upload model artifact
       if: steps.train.outputs.model_trained == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: air-quality-model
         path: |
