@@ -4,20 +4,26 @@ from datetime import datetime, timedelta
 from app import get_air_quality_data
 import time
 
+
 def flatten_air_quality_data(data, date_str=None):
-    """Flatten the air quality data structure, preserving all available fields."""
+    """
+    Flatten the air quality data structure, preserving all available fields.
+
+    Args:
+        data (dict): Raw air quality data from API.
+        date_str (str, optional): Date string to use for timestamp fields.
+
+    Returns:
+        dict: Flattened air quality data.
+    """
     if not data or 'aqi' not in data:
         return None
-    
-    # Get current timestamp
+
     now = datetime.now()
-    timestamp = date_str or now.strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = date_str + " 00:00:00" if date_str else now.strftime('%Y-%m-%d %H:%M:%S')
     date = date_str or now.strftime('%Y-%m-%d')
-    
-    # Extract basic air quality data
+
     iaqi = data.get('iaqi', {})
-    
-    # Create base flat data with all direct fields
     flat_data = {
         'timestamp': timestamp,
         'date': date,
@@ -43,34 +49,39 @@ def flatten_air_quality_data(data, date_str=None):
         'time_tz': data.get('time', {}).get('tz'),
         'time_v': data.get('time', {}).get('v'),
         'attributions': '|'.join([attr.get('name', '') for attr in data.get('attributions', []) if isinstance(attr, dict) and 'name' in attr]),
-        
         # New fields with None as default
-        'pm25_trend': None,  # Will need additional data or calculation
-        'pm25_24h_change': None,  # Will need historical data to calculate
-        'pm25_7d_avg': None,  # Will need historical data to calculate
-        'pm25_pm10_ratio': lambda: flat_data['pm25'] / flat_data['pm10'] if flat_data.get('pm25') and flat_data.get('pm10') else None,
-        'pm25_no2_ratio': lambda: flat_data['pm25'] / flat_data['no2'] if flat_data.get('pm25') and flat_data.get('no2') else None,
-        'pm25_o3_ratio': lambda: flat_data['pm25'] / flat_data['o3'] if flat_data.get('pm25') and flat_data.get('o3') else None,
-        'heat_index': None,  # Will need calculation based on temp and humidity
+        'pm25_trend': None,
+        'pm25_24h_change': None,
+        'pm25_7d_avg': None,
+        'heat_index': None,
         'hour_of_day': now.hour,
-        'day_of_week': now.weekday(),  # Monday is 0 and Sunday is 6
-        'is_weekend': 1 if now.weekday() >= 5 else 0,  # 1 for Saturday or Sunday, 0 otherwise
+        'day_of_week': now.weekday(),
+        'is_weekend': 1 if now.weekday() >= 5 else 0,
         'month': now.month,
-        'season': (now.month % 12 + 3) // 3,  # 1:Winter, 2:Spring, 3:Summer, 4:Fall
-        'pm25_trend_slope': None,  # Will need time series data to calculate
-        'aqhi': None,  # Will need calculation based on pollutants
+        'season': (now.month % 12 + 3) // 3,
+        'pm25_trend_slope': None,
+        'aqhi': None,
     }
-    
-    # Calculate derived fields
-    flat_data['pm25_pm10_ratio'] = flat_data['pm25_pm10_ratio']() if callable(flat_data['pm25_pm10_ratio']) else None
-    flat_data['pm25_no2_ratio'] = flat_data['pm25_no2_ratio']() if callable(flat_data['pm25_no2_ratio']) else None
-    flat_data['pm25_o3_ratio'] = flat_data['pm25_o3_ratio']() if callable(flat_data['pm25_o3_ratio']) else None
-    
-    # Add all individual air quality indices (iaqi) for backward compatibility
+
+    # Calculate ratios
+    try:
+        flat_data['pm25_pm10_ratio'] = flat_data['pm25'] / flat_data['pm10'] if flat_data['pm25'] and flat_data['pm10'] else None
+    except Exception:
+        flat_data['pm25_pm10_ratio'] = None
+    try:
+        flat_data['pm25_no2_ratio'] = flat_data['pm25'] / flat_data['no2'] if flat_data['pm25'] and flat_data['no2'] else None
+    except Exception:
+        flat_data['pm25_no2_ratio'] = None
+    try:
+        flat_data['pm25_o3_ratio'] = flat_data['pm25'] / flat_data['o3'] if flat_data['pm25'] and flat_data['o3'] else None
+    except Exception:
+        flat_data['pm25_o3_ratio'] = None
+
+    # Add all individual air quality indices (iaqi)
     for key, value in iaqi.items():
         if isinstance(value, dict) and 'v' in value and f'iaqi_{key}' not in flat_data:
             flat_data[f'iaqi_{key}'] = value['v']
-    
+
     # Add forecast data if available
     forecast = data.get('forecast', {})
     for day, day_data in forecast.get('daily', {}).items():
@@ -81,14 +92,27 @@ def flatten_air_quality_data(data, date_str=None):
                     flat_data[f'forecast_{day}_{i}_day'] = item.get('day')
                     flat_data[f'forecast_{day}_{i}_max'] = item.get('max')
                     flat_data[f'forecast_{day}_{i}_min'] = item.get('min')
-    
+
     # Add debugging info
     if 'debug' in data:
         flat_data['debug'] = str(data['debug'])
-    
+
     return flat_data
 
-def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"):
+def fetch_multiple_days_data(start_date, end_date, api_token=None, city="Milpitas"):
+    """
+    Fetch air quality data for a city for each day in a date range.
+    Note: Only fetches current data for each day (not true historical data).
+
+    Args:
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+        api_token (str, optional): API token for AQICN.
+        city (str): City name.
+
+    Returns:
+        pd.DataFrame: DataFrame of flattened air quality data.
+    """
     if api_token is None:
         api_token = os.getenv("AQICN_TOKEN")
         if api_token is None:
@@ -106,7 +130,6 @@ def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"
             # Remove date parameter since get_air_quality_data doesn't support it
             data = get_air_quality_data(api_token, city)
             if data:
-                # Add the date to the data since we're not getting historical data
                 data['date'] = date_str
                 flat_data = flatten_air_quality_data(data, date_str)
                 if flat_data:
@@ -119,17 +142,16 @@ def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"
         except Exception as e:
             print(f"Error fetching data for {date_str}: {str(e)}")
         current_date += timedelta(days=1)
-        # Add a small delay to avoid hitting rate limits
-        time.sleep(1)
+        time.sleep(1)  # Avoid rate limits
 
     if all_data:
         df = pd.DataFrame(all_data)
-        
         print(f"Fetched {len(df)} records.")
         return df
     else:
         print("No data fetched.")
         return pd.DataFrame()
+
 
 def main():
     import argparse

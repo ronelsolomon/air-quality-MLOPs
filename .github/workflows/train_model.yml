@@ -1,10 +1,6 @@
 name: Train Air Quality Model
 
 on:
-  schedule:
-    # Run every Monday at 2 AM UTC (6 PM Sunday Pacific Time)
-    - cron: '0 2 * * 1'
-  # Allow manual triggering
   workflow_dispatch:
     inputs:
       test_size:
