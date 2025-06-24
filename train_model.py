@@ -32,8 +32,8 @@ def load_and_validate_data(filepath: str = 'training_data.csv') -> pd.DataFrame:
     dupes = df['timestamp'].duplicated().sum()
     if dupes > 0:
         print(f"Warning: {dupes} duplicate timestamps found. Aggregating by mean.")
-    df = df.groupby('timestamp').mean(numeric_only=True).reset_index()
-    df = df.sort_values('timestamp')
+        df = df.groupby('timestamp').mean(numeric_only=True).reset_index()
+        df = df.sort_values('timestamp')
     if df['aqi'].nunique() == 1:
         print("Warning: AQI values are constant. Model cannot learn anything.")
     print(f"Final data points after processing: {len(df)}")
