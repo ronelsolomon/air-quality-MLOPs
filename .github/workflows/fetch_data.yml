@@ -79,7 +79,7 @@ jobs:
         echo "Fetching data from $START_DATE to $END_DATE"
         
         # Run the lightweight fetch script
-        python fetch_data_github.py \
+        python fetch_historical_data.py \
           --start-date "$START_DATE" \
           --end-date "$END_DATE" \
           --output training_data.csv \
