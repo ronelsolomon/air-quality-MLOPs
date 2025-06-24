@@ -45,7 +45,9 @@ def main():
     parser.add_argument("--api-token", required=True)
     args = parser.parse_args()
 
-    new_data = fetch_historical_datas(args.start_date, args.end_date, args.api_token)
+    API_TOKEN = os.getenv("AQICN_TOKEN")
+
+    new_data = fetch_historical_datas(args.start_date, args.end_date, api_token=API_TOKEN)
 
     if os.path.exists(args.output):
         # Read existing data
