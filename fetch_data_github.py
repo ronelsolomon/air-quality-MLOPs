@@ -5,24 +5,49 @@ from app import get_air_quality_data
 import time
 
 def flatten_air_quality_data(data, date_str=None):
-    """Flatten the nested air quality data structure."""
+    """Flatten the air quality data structure, preserving all available fields."""
     if not data or 'aqi' not in data:
         return None
-        
-    # Create a flat dictionary with the data we want to save
+    
+    # Create base flat data with all direct fields
     flat_data = {
         'timestamp': date_str or datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'date': date_str or datetime.now().strftime('%Y-%m-%d'),  
+        'date': date_str or datetime.now().strftime('%Y-%m-%d'),
         'aqi': data.get('aqi'),
         'dominant_pollutant': data.get('dominentpol'),
-        'city': data.get('city', {}).get('name', '')
+        'city': data.get('city', {}).get('name', ''),
+        'city_geo_lat': data.get('city', {}).get('geo', [None])[0] if isinstance(data.get('city', {}).get('geo'), list) and len(data.get('city', {}).get('geo', [])) > 0 else None,
+        'city_geo_lon': data.get('city', {}).get('geo', [None, None])[1] if isinstance(data.get('city', {}).get('geo'), list) and len(data.get('city', {}).get('geo', [])) > 1 else None,
+        'station_name': data.get('city', {}).get('name'),
+        'station_url': data.get('city', {}).get('url'),
+        'station_idx': data.get('idx'),
+        'time_iso': data.get('time', {}).get('iso'),
+        'time_s': data.get('time', {}).get('s'),
+        'time_tz': data.get('time', {}).get('tz'),
+        'time_v': data.get('time', {}).get('v'),
+        'attributions': '|'.join([attr.get('name', '') for attr in data.get('attributions', []) if isinstance(attr, dict) and 'name' in attr]),
     }
     
-    # Add individual pollutant data
+    # Add all individual air quality indices (iaqi)
     iaqi = data.get('iaqi', {})
     for key, value in iaqi.items():
         if isinstance(value, dict) and 'v' in value:
             flat_data[f'iaqi_{key}'] = value['v']
+    
+    # Add forecast data if available
+    forecast = data.get('forecast', {})
+    for day, day_data in forecast.get('daily', {}).items():
+        if isinstance(day_data, list):
+            for i, item in enumerate(day_data):
+                if isinstance(item, dict) and 'avg' in item and 'day' in item:
+                    flat_data[f'forecast_{day}_{i}_avg'] = item.get('avg')
+                    flat_data[f'forecast_{day}_{i}_day'] = item.get('day')
+                    flat_data[f'forecast_{day}_{i}_max'] = item.get('max')
+                    flat_data[f'forecast_{day}_{i}_min'] = item.get('min')
+    
+    # Add debugging info
+    if 'debug' in data:
+        flat_data['debug'] = str(data['debug'])
     
     return flat_data
 
