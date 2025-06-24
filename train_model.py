@@ -37,6 +37,7 @@ def load_and_validate_data(filepath: str = 'training_data.csv') -> pd.DataFrame:
     if df['aqi'].nunique() == 1:
         print("Warning: AQI values are constant. Model cannot learn anything.")
     print(f"Final data points after processing: {len(df)}")
+    print(df.head())
     return df
 
 def preprocess_data(df: pd.DataFrame):
