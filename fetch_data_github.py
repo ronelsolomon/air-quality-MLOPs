@@ -40,8 +40,11 @@ def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"
         date_str = current_date.strftime('%Y-%m-%d')
         print(f"Fetching data for {city} on {date_str}...")
         try:
-            data = get_air_quality_data(api_token, city, date=date_str)
+            # Remove date parameter since get_air_quality_data doesn't support it
+            data = get_air_quality_data(api_token, city)
             if data:
+                # Add the date to the data since we're not getting historical data
+                data['date'] = date_str
                 flat_data = flatten_air_quality_data(data, date_str)
                 if flat_data:
                     all_data.append(flat_data)
@@ -59,8 +62,8 @@ def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"
     if all_data:
         df = pd.DataFrame(all_data)
         # Ensure consistent column order
-        columns = ['timestamp', 'aqi', 'dominant_pollutant', 'city'] + \
-                 [col for col in df.columns if col.startswith('iaqi_')]
+        columns = ['timestamp', 'date', 'aqi', 'dominant_pollutant', 'city'] + \
+                 [col for col in df.columns if col.startswith('iaqi_') and col not in ['timestamp', 'date', 'aqi', 'dominant_pollutant', 'city']]
         df = df[sorted(columns)]
         print(f"Fetched {len(df)} records.")
         return df
