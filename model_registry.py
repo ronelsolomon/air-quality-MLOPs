@@ -50,7 +50,13 @@ def log_model(
         # Log feature importance as a metric (first 10 most important features)
         top_features = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10])
         for feature, importance in top_features.items():
-            mlflow.log_metric(f"feature_importance_{feature}", importance)
+            # Clean the feature name to be MLflow compatible
+            clean_feature = ''.join(c if c.isalnum() else '_' for c in str(feature))
+            # Ensure the metric name is not too long and doesn't start with a number
+            metric_name = f"feature_importance_{clean_feature}"[:250]  # MLflow has a 250 char limit
+            if metric_name[0].isdigit():
+                metric_name = f"f_{metric_name}"  # Add prefix if starts with digit
+            mlflow.log_metric(metric_name, float(importance))  # Ensure importance is float
         
         # Log the model
         mlflow.sklearn.log_model(

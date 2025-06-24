@@ -273,11 +273,20 @@ def main():
         # Optionally transition model to production
         if metrics.get('r2', 0) > 0.7:  # Only promote if R2 > 0.7
             print("\n=== Promoting Model to Production ===")
-            transition_model_stage(
-                model_name="air_quality_predictor",
-                version=1,  # You might want to get this dynamically
-                stage="Production"
-            )
+            try:
+                # Get the latest version of the model
+                client = mlflow.tracking.MlflowClient()
+                model_versions = client.search_model_versions(f"name='air_quality_predictor'")
+                latest_version = max([int(mv.version) for mv in model_versions]) if model_versions else 1
+                
+                transition_model_stage(
+                    model_name="air_quality_predictor",
+                    version=latest_version,  # Use the latest version
+                    stage="Production"
+                )
+            except Exception as e:
+                print(f"Warning: Could not promote model to production: {str(e)}")
+                print("The model was still trained and logged, but not promoted to production.")
         
         # Generate and save plots
         print("\n=== Generating Plots ===")
