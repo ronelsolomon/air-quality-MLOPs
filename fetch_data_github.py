@@ -12,6 +12,7 @@ def flatten_air_quality_data(data, date_str=None):
     # Create a flat dictionary with the data we want to save
     flat_data = {
         'timestamp': date_str or datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'date': date_str or datetime.now().strftime('%Y-%m-%d'),  
         'aqi': data.get('aqi'),
         'dominant_pollutant': data.get('dominentpol'),
         'city': data.get('city', {}).get('name', '')
