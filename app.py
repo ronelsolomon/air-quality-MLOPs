@@ -1,6 +1,6 @@
 import requests
 from datetime import datetime, timedelta
-from feature_store import AirQualityFeatureStore
+
 
 def get_air_quality_data(api_token, city='Milpitas', lat=None, lng=None):
     """
@@ -125,32 +125,18 @@ def analyze_air_quality(data):
 
 def main():
     # Initialize the feature store
-    feature_store = AirQualityFeatureStore()
+    # feature_store = AirQualityFeatureStore()
     
     # Get air quality data
-    API_TOKEN = "18fed86f6f05b8695480ad90a15a00661e1b28de"
+    API_TOKEN = os.getenv("AQICN_TOKEN")
     data = get_air_quality_data(API_TOKEN, "Milpitas")
     
-    if data:
-        # Prepare and store features
-        features = feature_store.prepare_feature_data(data)
-        feature_store.store_features(features)
-        
-        # Print some info
-        print(f"Stored features for {features['station']} at {features['timestamp']}")
-        print(f"Current AQI: {features['aqi']} ({features['aqi_category']})")
-        print(f"PM2.5: {features['pm25']} μg/m³")
-        print(f"Temperature: {features['temperature']}°C")
-        
-        # Get historical features
-        station_id = data['city']['name'].lower().replace(' ', '_')
-        historical = feature_store.get_historical_features(
-            station_id=station_id,
-            start_date=datetime.utcnow() - timedelta(days=7),
-            end_date=datetime.utcnow()
-        )
-        print("\nHistorical features:")
-        print(historical.tail())
+    # if data:
+    #     # Prepare and store features
+    #     features = feature_store.prepare_feature_data(data)
+    #     feature_store.store_features(features)
+    
+    return data
 
 if __name__ == "__main__":
     main()
