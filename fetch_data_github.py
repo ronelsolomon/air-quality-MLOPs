@@ -1,48 +1,40 @@
-#!/usr/bin/env python3
-"""
-Lightweight script for GitHub Actions to fetch air quality data.
-This version doesn't depend on Feast to avoid dependency issues.
-"""
-import sys
 import os
 import pandas as pd
 from datetime import datetime, timedelta
+from app import get_air_quality_data  # Your function that calls the API
 
-def fetch_air_quality_data(start_date: str, end_date: str, output_file: str, api_token: str = None):
-    """
-    Fetch air quality data from the API between start_date and end_date.
-    
-    Args:
-        start_date: Start date in YYYY-MM-DD format
-        end_date: End date in YYYY-MM-DD format
-        output_file: Path to save the CSV file
-        api_token: Optional API token
-    """
-    # This is a placeholder - replace with your actual API call
-    # For now, we'll just create a dummy DataFrame
-    print(f"[INFO] Fetching data from {start_date} to {end_date}")
-    
-    # Create a simple DataFrame with the date range
-    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-    data = []
-    
-    for date in date_range:
-        # Replace this with actual API call
-        data.append({
-            'timestamp': date,
-            'aqi': 50,  # Example value
-            'pm25': 12.5,  # Example value
-            'pm10': 20.0,  # Example value
-            'temperature': 22.0,  # Example value
-            'humidity': 65.0  # Example value
-        })
-    
-    df = pd.DataFrame(data)
-    
-    # Save to CSV
-    df.to_csv(output_file, index=False)
-    print(f"[INFO] Saved {len(df)} records to {output_file}")
-    return df
+def fetch_historical_datas(start_date, end_date, output_file="training_data.csv", api_token=None, city="Milpitas"):
+    if api_token is None:
+        api_token = os.getenv("AQICN_TOKEN")
+        if api_token is None:
+            raise ValueError("API token not provided and AQICN_TOKEN environment variable not set")
+
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    all_data = []
+
+    current_date = start
+    while current_date <= end:
+        date_str = current_date.strftime('%Y-%m-%d')
+        print(f"Fetching data for {city} on {date_str}...")
+        try:
+            data = get_air_quality_data(api_token, city, date=date_str)
+            if data:
+                all_data.append(data)
+        except Exception as e:
+            print(f"Error fetching data for {date_str}: {str(e)}")
+        current_date += timedelta(days=1)
+
+    if all_data:
+        df = pd.DataFrame(all_data)
+        df.to_csv(output_file, index=False)
+        print(f"Saved {len(df)} records to {output_file}")
+    else:
+        print("No data fetched.")
+
+# Usage example:
+# fetch_historical_data("2025-06-20", "2025-06-23", output_file="aq_data.csv", api_token="YOUR_TOKEN")
+
 
 def main():
     import argparse
@@ -53,7 +45,7 @@ def main():
     parser.add_argument("--api-token", required=True)
     args = parser.parse_args()
 
-    new_data = fetch_air_quality_data(args.start_date, args.end_date, args.api_token)
+    new_data = fetch_historical_datas(args.start_date, args.end_date, args.api_token)
 
     if os.path.exists(args.output):
         # Read existing data
