@@ -62,10 +62,7 @@ def fetch_historical_datas(start_date, end_date, api_token=None, city="Milpitas"
 
     if all_data:
         df = pd.DataFrame(all_data)
-        # Ensure consistent column order
-        columns = ['timestamp', 'date', 'aqi', 'dominant_pollutant', 'city'] + \
-                 [col for col in df.columns if col.startswith('iaqi_') and col not in ['timestamp', 'date', 'aqi', 'dominant_pollutant', 'city']]
-        df = df[sorted(columns)]
+        
         print(f"Fetched {len(df)} records.")
         return df
     else:
