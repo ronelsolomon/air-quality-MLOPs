@@ -8,16 +8,15 @@ on:
   workflow_dispatch:
     inputs:
       start_date:
-        description: 'Start date (YYYY-MM-DD). If not provided, fetches from 2020-01-01'
+        description: 'Start date (YYYY-MM-DD). If not provided, uses end_date - days_back'
         required: false
-        default: '2020-01-01'
       end_date:
-        description: 'End date (YYYY-MM-DD). Defaults to yesterday'
+        description: 'End date (YYYY-MM-DD). Defaults to today'
         required: false
-      chunk_days:
-        description: 'Number of days to fetch in each chunk (max 30)'
+      days_back:
+        description: 'Number of days of historical data to fetch (used if start_date not provided)'
         required: false
-        default: '30'
+        default: '1'
 
 jobs:
   fetch-data:
@@ -45,6 +44,7 @@ jobs:
     
     - name: Fetch historical data
       id: fetch
+      # Environment variables can be added here when needed
       run: |
         # Set end date (default to yesterday to ensure data is available)
         if [ -z "${{ github.event.inputs.end_date }}" ]; then
@@ -55,52 +55,44 @@ jobs:
           echo "Using provided end date: $END_DATE"
         fi
         
-        # Set start date from input or default to 2020-01-01
-        START_DATE="${{ github.event.inputs.start_date }}"
-        echo "Using start date: $START_DATE"
-        
-        # Set chunk size (days per API call)
-        CHUNK_DAYS=${{ github.event.inputs.chunk_days }}
-        if [ $CHUNK_DAYS -gt 30 ]; then
-          echo "Warning: Maximum chunk size is 30 days. Using 30 days."
-          CHUNK_DAYS=30
+        # Set start date based on input or calculate from days_back
+        if [ -n "${{ github.event.inputs.start_date }}" ]; then
+          START_DATE="${{ github.event.inputs.start_date }}"
+          echo "Using provided start date: $START_DATE"
+        else
+          # Set API token from environment variable
+          DAYS_BACK="${{ github.event.inputs.days_back }}"
+          if [ -z "$DAYS_BACK" ]; then DAYS_BACK=1; fi
+
+          # Calculate start date as (end_date - days_back + 1) to be inclusive
+          OFFSET=$((DAYS_BACK - 1))
+          START_DATE=$(date -d "$END_DATE - $OFFSET days" +'%Y-%m-%d')
+          echo "Calculated start date: $START_DATE"
         fi
         
-        # Convert dates to timestamps for calculation
-        END_TS=$(date -d "$END_DATE" +%s)
-        CURRENT_TS=$(date -d "$START_DATE" +%s)
+        # Validate dates
+        if [ "$(date -d "$START_DATE" +%s)" -gt "$(date -d "$END_DATE" +%s)" ]; then
+          echo "Error: Start date ($START_DATE) is after end date ($END_DATE)"
+          exit 1
+        fi
         
-        # Process in chunks
-        while [ $CURRENT_TS -le $END_TS ]; do
-          # Calculate chunk end date
-          CHUNK_END_TS=$((CURRENT_TS + (CHUNK_DAYS - 1) * 86400))
-          
-          # Don't go beyond the end date
-          if [ $CHUNK_END_TS -gt $END_TS ]; then
-            CHUNK_END_TS=$END_TS
-          fi
-          
-          # Convert back to YYYY-MM-DD format
-          CHUNK_START=$(date -d "@$CURRENT_TS" +'%Y-%m-%d')
-          CHUNK_END=$(date -d "@$CHUNK_END_TS" +'%Y-%m-%d')
-          
-          echo "Processing chunk: $CHUNK_START to $CHUNK_END"
-          
-          # Run the fetch script for this chunk
-          python fetch_data_github.py \
-            --start-date "$CHUNK_START" \
-            --end-date "$CHUNK_END" \
-            --output training_data.csv \
-            --api-token "${{ env.API_TOKEN }}" \
-            --city "Milpitas"
-          
-          # Move to next chunk
-          CURRENT_TS=$((CHUNK_END_TS + 86400))
-          
-          # Add a small delay between chunks
-          sleep 5
-        done
+        echo "Fetching data from $START_DATE to $END_DATE"
         
+        # Run the lightweight fetch script
+        python fetch_data_github.py \
+          --start-date "$START_DATE" \
+          --end-date "$END_DATE" \
+          --output training_data.csv \
+          --api-token "18fed86f6f05b8695480ad90a15a00661e1b28de" \
+          --city "Milpitas"
+        
+        # Check if the script ran successfully
+        if [ $? -ne 0 ]; then
+          echo "Error: Failed to fetch data"
+          exit 1
+        fi
+        
+        # Output the date range for use in subsequent steps
         echo "START_DATE=$START_DATE" >> $GITHUB_ENV
         echo "END_DATE=$END_DATE" >> $GITHUB_ENV
     
@@ -115,12 +107,14 @@ jobs:
           echo "changes_detected=false" >> $GITHUB_OUTPUT
         else
           echo "changes_detected=true" >> $GITHUB_OUTPUT
-          
-          # Commit and push changes
-          git add training_data.csv
-          git commit -m "[Automated] Update air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
-          git push
         fi
+
+    - name: Commit and push changes
+      if: steps.git-check.outputs.changes_detected == 'true'
+      run: |
+        git add training_data.csv
+        git commit -m "[Automated] Update air quality data (${{ env.START_DATE }} to ${{ env.END_DATE }})"
+        git push
     
     - name: Output date range info
       run: |
