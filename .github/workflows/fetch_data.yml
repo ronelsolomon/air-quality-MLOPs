@@ -1,10 +1,7 @@
 name: Fetch Air Quality Data
 
 on:
-  schedule:
-    # Runs at 00:00 UTC every day (4:00 PM PST / 5:00 PM PDT)
-    - cron: '0 0 * * *'
-  # Allow manual triggering
+  
   workflow_dispatch:
     inputs:
       start_date:
